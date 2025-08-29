@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "Frontend for real-time chat application",
   "private": true,
+  "homepage": ".",
   "dependencies": {
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
