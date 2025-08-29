@@ -1,5 +1,5 @@
 // API Configuration
-const API_BASE_URL = 'https://chat-app-1-izne.onrender.com';
+const API_BASE_URL = 'https://chat-app-2-dmao.onrender.com';
 
 export const API_ENDPOINTS = {
   LOGIN: `${API_BASE_URL}/api/auth/login`,
