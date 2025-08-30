@@ -48,7 +48,7 @@ const Chat = () => {
   }, []);
 
   useEffect(() => {
-    const newSocket = io('https://chat-app-1-izne.onrender.com', {
+    const newSocket = io('https://chat-app-3-ch2x.onrender.com', {
       transports: ['websocket', 'polling'],
       timeout: 20000,
     });

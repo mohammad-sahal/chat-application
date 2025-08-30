@@ -37,7 +37,7 @@ A React-based frontend for the real-time chat application with Socket.IO client 
    npm start
    ```
 
-The application will open in your browser at `http://localhost:3000`
+The application will open in your browser at `http://localhost:5000`
 
 ## Project Structure
 
