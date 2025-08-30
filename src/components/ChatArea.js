@@ -1080,6 +1080,20 @@ const ChatArea = ({ socket, chat, chatType, onInitiateCall, onBackToSidebar, isM
       }));
     };
 
+    const handleMessageEdited = (data) => {
+      setMessages(prev => prev.map(msg => {
+        if (msg._id === data.messageId) {
+          return {
+            ...msg,
+            content: data.message.content,
+            edited: true,
+            editedAt: data.message.editedAt
+          };
+        }
+        return msg;
+      }));
+    };
+
     const handleTypingEvent = (data) => {
       const isCurrentChat = (chatType === 'user' && data.chatId === chat._id) || 
                            (chatType === 'group' && data.chatId === chat._id);
@@ -1113,6 +1127,7 @@ const ChatArea = ({ socket, chat, chatType, onInitiateCall, onBackToSidebar, isM
     socket.on('group message', handleNewMessage);
     socket.on('message deleted', handleMessageDeleted);
     socket.on('message read', handleMessageRead);
+    socket.on('message edited', handleMessageEdited);
     socket.on('typing', handleTypingEvent);
     socket.on('stop typing', handleStopTypingEvent);
 
@@ -1121,6 +1136,7 @@ const ChatArea = ({ socket, chat, chatType, onInitiateCall, onBackToSidebar, isM
       socket.off('group message', handleNewMessage);
       socket.off('message deleted', handleMessageDeleted);
       socket.off('message read', handleMessageRead);
+      socket.off('message edited', handleMessageEdited);
       socket.off('typing', handleTypingEvent);
       socket.off('stop typing', handleStopTypingEvent);
     };
@@ -1266,6 +1282,8 @@ const ChatArea = ({ socket, chat, chatType, onInitiateCall, onBackToSidebar, isM
                   user={user}
                   onDelete={handleDeleteMessage}
                   onMarkAsRead={handleMarkAsRead}
+                  onEdit={handleEditMessage}
+                  onCopy={handleCopyMessage}
                 />
               );
             })}
