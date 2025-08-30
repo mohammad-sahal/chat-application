@@ -203,11 +203,14 @@ const VoiceMessage = React.memo(({ message, isOwn }) => {
   );
 });
 
-const Message = React.memo(({ message, isOwn, showAvatar, user, onDelete, onMarkAsRead }) => {
+const Message = React.memo(({ message, isOwn, showAvatar, user, onDelete, onMarkAsRead, onEdit, onCopy }) => {
   const [showOptions, setShowOptions] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editText, setEditText] = useState(message.content);
   const [longPressTimer, setLongPressTimer] = useState(null);
+  const editInputRef = useRef(null);
 
   const formatTime = (date) => {
     return new Date(date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -233,6 +236,60 @@ const Message = React.memo(({ message, isOwn, showAvatar, user, onDelete, onMark
 
   const handleCancelDelete = () => {
     setShowDeleteConfirm(false);
+  };
+
+  const handleEditClick = () => {
+    if (message.type !== 'text') return; // Only allow text editing
+    setIsEditing(true);
+    setShowOptions(false);
+    setTimeout(() => editInputRef.current?.focus(), 100);
+  };
+
+  const handleEditSave = async () => {
+    if (editText.trim() === '') return;
+    if (editText.trim() === message.content) {
+      setIsEditing(false);
+      return;
+    }
+
+    try {
+      await onEdit(message._id, editText.trim());
+      setIsEditing(false);
+    } catch (error) {
+      console.error('Failed to edit message:', error);
+      alert('Failed to edit message. Please try again.');
+    }
+  };
+
+  const handleEditCancel = () => {
+    setEditText(message.content);
+    setIsEditing(false);
+  };
+
+  const handleCopyClick = async () => {
+    try {
+      let textToCopy = '';
+      
+      if (message.type === 'text') {
+        textToCopy = message.content;
+      } else if (message.type === 'voice') {
+        textToCopy = 'Voice message';
+      } else if (message.type === 'image') {
+        textToCopy = 'Image message';
+      } else {
+        textToCopy = 'Message content';
+      }
+
+      await navigator.clipboard.writeText(textToCopy);
+      setShowOptions(false);
+      
+      // Show temporary feedback
+      const originalText = textToCopy.substring(0, 20) + (textToCopy.length > 20 ? '...' : '');
+      alert(`Copied: "${originalText}"`);
+    } catch (error) {
+      console.error('Failed to copy message:', error);
+      alert('Failed to copy message to clipboard');
+    }
   };
 
   // Long press handlers for mobile
@@ -384,24 +441,29 @@ const Message = React.memo(({ message, isOwn, showAvatar, user, onDelete, onMark
                 <span>Delete Message</span>
               </button>
               <button
-                className="w-full px-4 py-2 text-sm text-gray-600 hover:bg-gray-50 flex items-center space-x-2 transition-colors"
-                title="Coming soon"
-                disabled
+                onClick={handleEditClick}
+                disabled={message.type !== 'text'}
+                className={`w-full px-4 py-2 text-sm flex items-center space-x-2 transition-colors ${
+                  message.type === 'text' 
+                    ? 'text-blue-600 hover:bg-blue-50' 
+                    : 'text-gray-400 cursor-not-allowed'
+                }`}
+                title={message.type === 'text' ? 'Edit this message' : 'Can only edit text messages'}
               >
                 <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
                   <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
                 </svg>
-                <span className="opacity-50">Edit Message</span>
+                <span>Edit Message</span>
               </button>
               <button
-                className="w-full px-4 py-2 text-sm text-gray-600 hover:bg-gray-50 flex items-center space-x-2 transition-colors"
-                title="Coming soon"
-                disabled
+                onClick={handleCopyClick}
+                className="w-full px-4 py-2 text-sm text-green-600 hover:bg-green-50 flex items-center space-x-2 transition-colors"
+                title="Copy message content"
               >
                 <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
                   <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
                 </svg>
-                <span className="opacity-50">Copy Message</span>
+                <span>Copy Message</span>
               </button>
             </div>
           </div>
@@ -446,9 +508,56 @@ const Message = React.memo(({ message, isOwn, showAvatar, user, onDelete, onMark
           }`}
         >
           {message.type === 'text' && (
-            <p className="text-sm sm:text-base leading-relaxed whitespace-pre-wrap break-words">
-              {message.content}
-            </p>
+            <>
+              {isEditing ? (
+                <div className="space-y-2">
+                  <textarea
+                    ref={editInputRef}
+                    value={editText}
+                    onChange={(e) => setEditText(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        handleEditSave();
+                      } else if (e.key === 'Escape') {
+                        handleEditCancel();
+                      }
+                    }}
+                    className={`w-full px-3 py-2 rounded-lg border resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm sm:text-base ${
+                      isOwn ? 'bg-blue-50 border-blue-200' : 'bg-gray-50 border-gray-200'
+                    }`}
+                    rows={Math.max(1, Math.ceil(editText.length / 40))}
+                    maxLength={1000}
+                  />
+                  <div className="flex justify-end space-x-2">
+                    <button
+                      onClick={handleEditCancel}
+                      className="px-3 py-1 text-xs text-gray-600 hover:text-gray-800 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleEditSave}
+                      disabled={!editText.trim() || editText.trim() === message.content}
+                      className={`px-3 py-1 text-xs rounded transition-colors ${
+                        editText.trim() && editText.trim() !== message.content
+                          ? 'bg-blue-600 text-white hover:bg-blue-700'
+                          : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                      }`}
+                    >
+                      Save
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm sm:text-base leading-relaxed whitespace-pre-wrap break-words">
+                  {message.content}
+                  {message.edited && (
+                    <span className="text-xs text-gray-400 ml-2">(edited)</span>
+                  )}
+                </p>
+              )}
+            </>
           )}
           
           {message.type === 'voice' && (
@@ -530,8 +639,15 @@ const MessageInput = ({
 }) => {
   const handleSubmit = (e) => {
     e.preventDefault();
+    console.log('Form submitted:', { newMessage, loading });
     if (newMessage.trim() && !loading) {
+      console.log('Calling onSendMessage');
       onSendMessage();
+    } else {
+      console.log('Form submission blocked:', { 
+        hasMessage: !!newMessage.trim(), 
+        loading 
+      });
     }
   };
 
@@ -561,6 +677,7 @@ const MessageInput = ({
               type="text"
               value={newMessage}
               onChange={(e) => {
+                console.log('Input changed:', e.target.value);
                 setNewMessage(e.target.value);
                 if (e.target.value.trim() !== '') {
                   onTyping();
@@ -601,6 +718,13 @@ const MessageInput = ({
         <button
           type="submit"
           disabled={!newMessage.trim() || loading}
+          onClick={(e) => {
+            console.log('Send button clicked', { newMessage, loading });
+            if (newMessage.trim() && !loading) {
+              console.log('Direct send button call');
+              onSendMessage();
+            }
+          }}
           className={`p-3 rounded-xl transition-all duration-200 flex-shrink-0 group ${
             newMessage.trim() && !loading
               ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-md hover:shadow-lg'
@@ -733,7 +857,40 @@ const ChatArea = ({ socket, chat, chatType, onInitiateCall, onBackToSidebar, isM
 
   // Handle sending messages
   const handleSendMessage = useCallback(() => {
-    if (!newMessage.trim() || !socket || loading) return;
+    // Debug logging
+    console.log('Attempting to send message:', {
+      newMessage: newMessage.trim(),
+      socket: !!socket,
+      loading,
+      user: !!user,
+      chat: !!chat,
+      chatType
+    });
+
+    if (!newMessage.trim()) {
+      console.log('Message is empty, not sending');
+      return;
+    }
+
+    if (!socket) {
+      console.log('Socket not connected');
+      return;
+    }
+
+    if (!user?.id) {
+      console.log('User not authenticated');
+      return;
+    }
+
+    if (!chat?._id) {
+      console.log('No chat selected');
+      return;
+    }
+
+    if (loading) {
+      console.log('Already loading, skipping');
+      return;
+    }
 
     const messageData = {
       senderId: user.id,
@@ -743,10 +900,12 @@ const ChatArea = ({ socket, chat, chatType, onInitiateCall, onBackToSidebar, isM
       [chatType === 'user' ? 'receiverId' : 'groupId']: chat._id
     };
 
+    console.log('Sending message:', messageData);
+    
     socket.emit(chatType === 'user' ? 'private message' : 'group message', messageData);
     setNewMessage('');
     handleStopTyping();
-  }, [newMessage, socket, loading, user.id, chatType, chat._id, handleStopTyping]);
+  }, [newMessage, socket, loading, user, chat, chatType, handleStopTyping]);
 
   // Handle emoji selection
   const handleEmojiSelect = useCallback((emoji) => {
@@ -805,6 +964,55 @@ const ChatArea = ({ socket, chat, chatType, onInitiateCall, onBackToSidebar, isM
       chatType 
     });
   }, [socket, user.id, chat?._id, chatType]);
+
+  // Handle message editing
+  const handleEditMessage = useCallback(async (messageId, newContent) => {
+    if (!socket || !messageId || !newContent.trim()) return;
+
+    try {
+      socket.emit('edit message', { 
+        messageId, 
+        newContent: newContent.trim(),
+        userId: user.id 
+      });
+
+      // Optimistically update UI
+      setMessages(prev => prev.map(msg => 
+        msg._id === messageId 
+          ? { ...msg, content: newContent.trim(), edited: true }
+          : msg
+      ));
+    } catch (error) {
+      console.error('Failed to edit message:', error);
+      throw error;
+    }
+  }, [socket, user.id]);
+
+  // Handle message copying
+  const handleCopyMessage = useCallback(async (messageContent, messageType) => {
+    try {
+      let textToCopy = '';
+      
+      if (messageType === 'text') {
+        textToCopy = messageContent;
+      } else if (messageType === 'voice') {
+        textToCopy = 'Voice message';
+      } else if (messageType === 'image') {
+        textToCopy = 'Image message';
+      } else {
+        textToCopy = 'Message content';
+      }
+
+      await navigator.clipboard.writeText(textToCopy);
+      
+      // Show temporary feedback
+      console.log(`Copied: "${textToCopy}"`);
+      return true;
+    } catch (error) {
+      console.error('Failed to copy message:', error);
+      throw error;
+    }
+  }, []);
 
   // Fetch messages when chat changes
   useEffect(() => {
