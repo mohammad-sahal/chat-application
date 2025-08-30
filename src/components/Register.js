@@ -7,12 +7,47 @@ const Register = () => {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [avatar, setAvatar] = useState('');
+  const [avatarFile, setAvatarFile] = useState(null);
+  const [avatarPreview, setAvatarPreview] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const { register } = useAuth();
   const navigate = useNavigate();
+
+  const handleImageUpload = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      // Validate file type
+      if (!file.type.startsWith('image/')) {
+        setError('Please select an image file');
+        return;
+      }
+      
+      // Validate file size (max 5MB)
+      if (file.size > 5 * 1024 * 1024) {
+        setError('Image size should be less than 5MB');
+        return;
+      }
+
+      setAvatarFile(file);
+      
+      // Create preview URL
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setAvatarPreview(e.target.result);
+        setAvatar(e.target.result); // Use base64 for now
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleRemoveImage = () => {
+    setAvatarFile(null);
+    setAvatarPreview('');
+    setAvatar('');
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -93,40 +128,64 @@ const Register = () => {
               </div>
             </div>
 
-            {/* Avatar Field */}
+            {/* Avatar Upload Field */}
             <div className="space-y-2">
-              <label htmlFor="avatar" className="block text-sm font-medium text-gray-700">
-                Avatar URL (Optional)
+              <label className="block text-sm font-medium text-gray-700">
+                Profile Picture (Optional)
               </label>
+              
+              {/* Upload Area */}
               <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                  </svg>
-                </div>
                 <input
                   id="avatar"
                   name="avatar"
-                  type="url"
-                  className="block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-xl placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all duration-200 bg-white/50 backdrop-blur-sm"
-                  placeholder="https://example.com/avatar.jpg"
-                  value={avatar}
-                  onChange={(e) => setAvatar(e.target.value)}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleImageUpload}
+                  className="hidden"
                 />
+                
+                {!avatarPreview ? (
+                  <label 
+                    htmlFor="avatar" 
+                    className="cursor-pointer block w-full border-2 border-dashed border-gray-300 rounded-xl p-6 text-center hover:border-green-500 hover:bg-green-50/50 transition-all duration-200"
+                  >
+                    <div className="flex flex-col items-center space-y-2">
+                      <svg className="h-8 w-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                      </svg>
+                      <div>
+                        <p className="text-sm text-gray-600 font-medium">Upload your photo</p>
+                        <p className="text-xs text-gray-500">PNG, JPG up to 5MB</p>
+                      </div>
+                    </div>
+                  </label>
+                ) : (
+                  <div className="relative">
+                    <div className="flex items-center space-x-4 p-4 border border-gray-300 rounded-xl bg-white/50">
+                      <img 
+                        src={avatarPreview} 
+                        alt="Avatar preview" 
+                        className="w-12 h-12 rounded-full object-cover border-2 border-green-500"
+                      />
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-gray-900">Profile picture uploaded</p>
+                        <p className="text-xs text-gray-500">{avatarFile?.name}</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleRemoveImage}
+                        className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-full transition-colors"
+                        title="Remove image"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
-              {avatar && (
-                <div className="flex items-center space-x-2 mt-2">
-                  <img 
-                    src={avatar} 
-                    alt="Avatar preview" 
-                    className="w-8 h-8 rounded-full border-2 border-gray-200"
-                    onError={(e) => {
-                      e.target.style.display = 'none';
-                    }}
-                  />
-                  <span className="text-xs text-gray-500">Avatar preview</span>
-                </div>
-              )}
             </div>
 
             {/* Password Field */}

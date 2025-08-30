@@ -105,6 +105,19 @@ const VoiceMessage = React.memo(({ message, isOwn }) => {
   const audioUrl = useMemo(() => {
     if (message.content && message.type === 'voice') {
       try {
+        // Validate that content looks like base64
+        if (typeof message.content !== 'string') {
+          console.warn('Voice message content is not a string:', typeof message.content);
+          return null;
+        }
+
+        // Basic base64 validation - check for valid characters and proper padding
+        const base64Regex = /^[A-Za-z0-9+/]*={0,2}$/;
+        if (!base64Regex.test(message.content)) {
+          console.warn('Voice message content is not valid base64:', message.content.substring(0, 100));
+          return null;
+        }
+
         // Convert base64 back to blob URL
         const byteCharacters = atob(message.content);
         const byteNumbers = new Array(byteCharacters.length);
@@ -133,10 +146,18 @@ const VoiceMessage = React.memo(({ message, isOwn }) => {
   const togglePlay = () => {
     if (!audioRef.current || !audioUrl) return;
 
-    if (isPlaying) {
-      audioRef.current.pause();
-    } else {
-      audioRef.current.play();
+    try {
+      if (isPlaying) {
+        audioRef.current.pause();
+      } else {
+        audioRef.current.play().catch(error => {
+          console.error('Error playing audio:', error);
+          setIsPlaying(false);
+        });
+      }
+    } catch (error) {
+      console.error('Error toggling audio play:', error);
+      setIsPlaying(false);
     }
   };
 
@@ -145,6 +166,28 @@ const VoiceMessage = React.memo(({ message, isOwn }) => {
     const secs = Math.floor(seconds % 60);
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
+
+  // Add safety check after hooks
+  if (!message || message.type !== 'voice') {
+    console.warn('VoiceMessage called with invalid message:', message);
+    return null;
+  }
+
+  // If no valid audio URL, show a fallback
+  if (!audioUrl) {
+    return (
+      <div className="flex items-center space-x-3 min-w-0">
+        <div className={`p-2 rounded-full ${isOwn ? 'bg-blue-500' : 'bg-gray-200'}`}>
+          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+          </svg>
+        </div>
+        <span className={`text-sm ${isOwn ? 'text-blue-200' : 'text-gray-500'}`}>
+          Voice message (unavailable)
+        </span>
+      </div>
+    );
+  }
 
   return (
     <div className="flex items-center space-x-3 min-w-0">
@@ -209,7 +252,6 @@ const Message = React.memo(({ message, isOwn, showAvatar, user, onDelete, onMark
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState(message.content);
-  const [longPressTimer, setLongPressTimer] = useState(null);
   const editInputRef = useRef(null);
 
   const formatTime = (date) => {
@@ -292,26 +334,6 @@ const Message = React.memo(({ message, isOwn, showAvatar, user, onDelete, onMark
     }
   };
 
-  // Long press handlers for mobile
-  const handleTouchStart = (e) => {
-    if (!isOwn) return;
-    
-    const timer = setTimeout(() => {
-      setShowOptions(true);
-      // Add haptic feedback if available
-      if (navigator.vibrate) {
-        navigator.vibrate(50);
-      }
-    }, 500);
-    setLongPressTimer(timer);
-  };
-
-  const handleTouchEnd = () => {
-    if (longPressTimer) {
-      clearTimeout(longPressTimer);
-      setLongPressTimer(null);
-    }
-  };
 
   const getReadStatus = () => {
     if (!isOwn) return null;
@@ -362,7 +384,8 @@ const Message = React.memo(({ message, isOwn, showAvatar, user, onDelete, onMark
     const handleClickOutside = (event) => {
       if (showDeleteConfirm || showOptions) {
         if (!event.target.closest('.message-options') && 
-            !event.target.closest('.delete-confirm')) {
+            !event.target.closest('.delete-confirm') &&
+            !event.target.closest('[title="Message options"]')) {
           setShowOptions(false);
           setShowDeleteConfirm(false);
         }
@@ -387,14 +410,6 @@ const Message = React.memo(({ message, isOwn, showAvatar, user, onDelete, onMark
     };
   }, [showDeleteConfirm, showOptions]);
 
-  // Cleanup long press timer on unmount
-  useEffect(() => {
-    return () => {
-      if (longPressTimer) {
-        clearTimeout(longPressTimer);
-      }
-    };
-  }, [longPressTimer]);
 
   if (isDeleting) {
     return (
@@ -410,11 +425,6 @@ const Message = React.memo(({ message, isOwn, showAvatar, user, onDelete, onMark
   return (
     <div 
       className={`flex items-end space-x-2 group relative ${isOwn ? 'justify-end' : 'justify-start'}`}
-      onMouseEnter={() => !showDeleteConfirm && setShowOptions(true)}
-      onMouseLeave={() => !showDeleteConfirm && setShowOptions(false)}
-      onTouchStart={handleTouchStart}
-      onTouchEnd={handleTouchEnd}
-      onTouchCancel={handleTouchEnd}
     >
       {!isOwn && showAvatar && (
         <img
@@ -426,30 +436,46 @@ const Message = React.memo(({ message, isOwn, showAvatar, user, onDelete, onMark
       {!isOwn && !showAvatar && <div className="w-6 sm:w-8 flex-shrink-0"></div>}
       
       <div className={`max-w-xs sm:max-w-md lg:max-w-lg xl:max-w-xl relative ${isOwn ? 'order-first' : ''}`}>
+
         {/* Message Options Menu */}
         {showOptions && isOwn && !showDeleteConfirm && (
-          <div className={`message-options absolute -top-12 ${isOwn ? 'right-0' : 'left-0'} bg-white border border-gray-200 rounded-xl shadow-lg z-20 min-w-max`}>
+          <div className={`message-options absolute top-8 ${isOwn ? 'right-0' : 'left-0'} bg-white border border-gray-200 rounded-lg shadow-xl z-30 min-w-max overflow-hidden`}>
             <div className="py-1">
-              <button
-                onClick={handleDeleteClick}
-                className="w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center space-x-2 transition-colors"
-                title="Delete this message"
-              >
-                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
-                </svg>
-                <span>Delete Message</span>
-              </button>
-            
+              {message.type === 'text' && (
+                <button
+                  onClick={handleEditClick}
+                  className="w-full px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 flex items-center space-x-3 transition-colors"
+                  title="Edit this message"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  </svg>
+                  <span>Edit</span>
+                </button>
+              )}
+              
               <button
                 onClick={handleCopyClick}
-                className="w-full px-4 py-2 text-sm text-green-600 hover:bg-green-50 flex items-center space-x-2 transition-colors"
+                className="w-full px-4 py-2.5 text-sm text-blue-600 hover:bg-blue-50 flex items-center space-x-3 transition-colors"
                 title="Copy message content"
               >
-                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
                 </svg>
-                <span>Copy Message</span>
+                <span>Copy</span>
+              </button>
+              
+              <div className="border-t border-gray-100 my-1"></div>
+              
+              <button
+                onClick={handleDeleteClick}
+                className="w-full px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 flex items-center space-x-3 transition-colors"
+                title="Delete this message"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+                <span>Delete</span>
               </button>
             </div>
           </div>
@@ -457,28 +483,28 @@ const Message = React.memo(({ message, isOwn, showAvatar, user, onDelete, onMark
 
         {/* Delete Confirmation Dialog */}
         {showDeleteConfirm && (
-          <div className={`delete-confirm absolute -top-20 ${isOwn ? 'right-0' : 'left-0'} bg-white border border-red-200 rounded-xl shadow-xl z-30 p-4 min-w-max`}>
-            <div className="flex items-center space-x-2 mb-3">
-              <div className="w-8 h-8 bg-red-100 rounded-full flex items-center justify-center">
-                <svg className="w-4 h-4 text-red-600" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/>
+          <div className={`delete-confirm absolute top-8 ${isOwn ? 'right-0' : 'left-0'} bg-white border border-red-200 rounded-lg shadow-xl z-40 p-4 min-w-max max-w-xs`}>
+            <div className="flex items-start space-x-3 mb-4">
+              <div className="w-8 h-8 bg-red-100 rounded-full flex items-center justify-center flex-shrink-0">
+                <svg className="w-4 h-4 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
                 </svg>
               </div>
-              <div>
-                <h4 className="text-sm font-semibold text-gray-900">Delete Message?</h4>
+              <div className="flex-1 min-w-0">
+                <h4 className="text-sm font-semibold text-gray-900 mb-1">Delete Message?</h4>
                 <p className="text-xs text-gray-600">This action cannot be undone</p>
               </div>
             </div>
             <div className="flex space-x-2">
               <button
                 onClick={handleCancelDelete}
-                className="flex-1 px-3 py-1.5 text-xs text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                className="flex-1 px-3 py-2 text-sm text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors font-medium"
               >
                 Cancel
               </button>
               <button
                 onClick={handleConfirmDelete}
-                className="flex-1 px-3 py-1.5 text-xs text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors"
+                className="flex-1 px-3 py-2 text-sm text-white bg-red-600 hover:bg-red-700 rounded-md transition-colors font-medium"
               >
                 Delete
               </button>
@@ -487,12 +513,27 @@ const Message = React.memo(({ message, isOwn, showAvatar, user, onDelete, onMark
         )}
 
         <div
-          className={`px-3 sm:px-4 py-2 rounded-2xl shadow-sm transition-all duration-200 hover:shadow-md ${
+          className={`px-3 sm:px-4 py-2 rounded-2xl shadow-sm transition-all duration-200 hover:shadow-md relative ${
             isOwn
-              ? 'bg-blue-600 text-white rounded-br-md'
+              ? 'bg-blue-600 text-white rounded-br-md pr-8'
               : 'bg-white text-gray-900 rounded-bl-md border border-gray-200'
           }`}
         >
+          {/* Message Options Button - Inside Bubble */}
+          {isOwn && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowOptions(!showOptions);
+              }}
+              className={`absolute top-1.5 right-1.5 p-0.5 rounded transition-all duration-200 hover:bg-black/10 ${showOptions ? 'bg-black/10' : ''}`}
+              title="Message options"
+            >
+              <svg className="w-3 h-3 text-white/60 hover:text-white/90" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/>
+              </svg>
+            </button>
+          )}
           {message.type === 'text' && (
             <>
               {isEditing ? (
@@ -623,17 +664,21 @@ const MessageInput = ({
   emojiButtonRef,
   voiceButtonRef 
 }) => {
+  const inputRef = useRef(null);
+
   const handleSubmit = (e) => {
     e.preventDefault();
-    console.log('Form submitted:', { newMessage, loading });
     if (newMessage.trim() && !loading) {
-      console.log('Calling onSendMessage');
       onSendMessage();
-    } else {
-      console.log('Form submission blocked:', { 
-        hasMessage: !!newMessage.trim(), 
-        loading 
-      });
+    }
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      if (newMessage.trim() && !loading) {
+        onSendMessage();
+      }
     }
   };
 
@@ -660,10 +705,10 @@ const MessageInput = ({
         <div className="flex-1 relative">
           <div className="flex items-center bg-gray-50 rounded-2xl border border-gray-200 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500 transition-all">
             <input
+              ref={inputRef}
               type="text"
               value={newMessage}
               onChange={(e) => {
-                console.log('Input changed:', e.target.value);
                 setNewMessage(e.target.value);
                 if (e.target.value.trim() !== '') {
                   onTyping();
@@ -671,6 +716,7 @@ const MessageInput = ({
                   onStopTyping();
                 }
               }}
+              onKeyDown={handleKeyDown}
               onBlur={onStopTyping}
               onFocus={() => {
                 if (newMessage.trim() !== '') {
@@ -680,6 +726,7 @@ const MessageInput = ({
               placeholder="Type a message..."
               className="flex-1 bg-transparent border-none outline-none px-4 py-3 text-gray-700 placeholder-gray-500 text-sm sm:text-base"
               disabled={loading}
+              autoComplete="off"
             />
             
             {/* Emoji Button */}
@@ -689,6 +736,7 @@ const MessageInput = ({
               onClick={() => {
                 setShowEmojiPicker(!showEmojiPicker);
                 setShowVoiceRecorder(false);
+                inputRef.current?.focus();
               }}
               className="emoji-btn p-2 sm:p-3 text-gray-500 hover:text-yellow-600 hover:bg-yellow-50 rounded-xl transition-all duration-200 flex-shrink-0 group"
               title="Emoji (Ctrl+E)"
@@ -704,13 +752,6 @@ const MessageInput = ({
         <button
           type="submit"
           disabled={!newMessage.trim() || loading}
-          onClick={(e) => {
-            console.log('Send button clicked', { newMessage, loading });
-            if (newMessage.trim() && !loading) {
-              console.log('Direct send button call');
-              onSendMessage();
-            }
-          }}
           className={`p-3 rounded-xl transition-all duration-200 flex-shrink-0 group ${
             newMessage.trim() && !loading
               ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-md hover:shadow-lg'
@@ -781,7 +822,8 @@ const ChatArea = ({ socket, chat, chatType, onInitiateCall, onBackToSidebar, isM
   const [typingUsers, setTypingUsers] = useState(new Map());
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showVoiceRecorder, setShowVoiceRecorder] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [messagesLoading, setMessagesLoading] = useState(true);
+  const [sendingMessage, setSendingMessage] = useState(false);
   const [error, setError] = useState(null);
   
   // Refs
@@ -843,40 +885,31 @@ const ChatArea = ({ socket, chat, chatType, onInitiateCall, onBackToSidebar, isM
 
   // Handle sending messages
   const handleSendMessage = useCallback(() => {
-    // Debug logging
-    console.log('Attempting to send message:', {
-      newMessage: newMessage.trim(),
-      socket: !!socket,
-      loading,
-      user: !!user,
-      chat: !!chat,
-      chatType
-    });
-
     if (!newMessage.trim()) {
-      console.log('Message is empty, not sending');
       return;
     }
 
     if (!socket) {
-      console.log('Socket not connected');
+      console.error('Socket not connected');
       return;
     }
 
     if (!user?.id) {
-      console.log('User not authenticated');
+      console.error('User not authenticated');
       return;
     }
 
     if (!chat?._id) {
-      console.log('No chat selected');
+      console.error('No chat selected');
       return;
     }
 
-    if (loading) {
-      console.log('Already loading, skipping');
+    if (sendingMessage) {
       return;
     }
+
+    // Set sending state to prevent duplicate sends
+    setSendingMessage(true);
 
     const messageData = {
       senderId: user.id,
@@ -886,12 +919,31 @@ const ChatArea = ({ socket, chat, chatType, onInitiateCall, onBackToSidebar, isM
       [chatType === 'user' ? 'receiverId' : 'groupId']: chat._id
     };
 
-    console.log('Sending message:', messageData);
+    // Clear message immediately for better UX
+    const messageContent = newMessage.trim();
+    setNewMessage('');
+    
+    // Stop typing manually without function dependency
+    if (isUserTyping && socket && chat) {
+      setIsUserTyping(false);
+      socket.emit('stop typing', {
+        senderId: user.id,
+        [chatType === 'user' ? 'receiverId' : 'groupId']: chat._id
+      });
+    }
+    
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = null;
+    }
     
     socket.emit(chatType === 'user' ? 'private message' : 'group message', messageData);
-    setNewMessage('');
-    handleStopTyping();
-  }, [newMessage, socket, loading, user, chat, chatType, handleStopTyping]);
+
+    // Reset sending state after a short delay
+    setTimeout(() => {
+      setSendingMessage(false);
+    }, 300);
+  }, [newMessage, socket, sendingMessage, user, chat, chatType, isUserTyping]);
 
   // Handle emoji selection
   const handleEmojiSelect = useCallback((emoji) => {
@@ -1005,7 +1057,7 @@ const ChatArea = ({ socket, chat, chatType, onInitiateCall, onBackToSidebar, isM
     if (!chat) return;
 
     const fetchMessages = async () => {
-      setLoading(true);
+      setMessagesLoading(true);
       setError(null);
       
       try {
@@ -1029,7 +1081,7 @@ const ChatArea = ({ socket, chat, chatType, onInitiateCall, onBackToSidebar, isM
         console.error('Error fetching messages:', err);
         setError(err.message);
       } finally {
-        setLoading(false);
+        setMessagesLoading(false);
       }
     };
 
@@ -1048,6 +1100,11 @@ const ChatArea = ({ socket, chat, chatType, onInitiateCall, onBackToSidebar, isM
         
         return [...prev, message];
       });
+      
+      // Reset sending state when message is received (in case it gets stuck)
+      if (message.sender._id === user.id || message.sender === user.id) {
+        setSendingMessage(false);
+      }
     };
 
     const handleMessageDeleted = (data) => {
@@ -1135,8 +1192,13 @@ const ChatArea = ({ socket, chat, chatType, onInitiateCall, onBackToSidebar, isM
     setShowEmojiPicker(false);
     setShowVoiceRecorder(false);
     setNewMessage('');
-    handleStopTyping();
-  }, [chat?._id, handleStopTyping]);
+    
+    // Clean up typing timeout without calling handleStopTyping
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = null;
+    }
+  }, [chat?._id]);
 
   // Clean up stale typing indicators
   useEffect(() => {
@@ -1240,7 +1302,7 @@ const ChatArea = ({ socket, chat, chatType, onInitiateCall, onBackToSidebar, isM
           backgroundImage: `url("data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 40 40' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%23f9fafb' fill-opacity='0.03'%3E%3Cpath d='m0 40l40-40h-40v40zm40 0v-40h-40l40 40z'/%3E%3C/g%3E%3C/svg%3E")` 
         }}
       >
-        {loading ? (
+        {messagesLoading ? (
           <MessageSkeleton />
         ) : error ? (
           <ErrorState 
@@ -1292,7 +1354,7 @@ const ChatArea = ({ socket, chat, chatType, onInitiateCall, onBackToSidebar, isM
         onSendMessage={handleSendMessage}
         onTyping={handleTyping}
         onStopTyping={handleStopTyping}
-        loading={loading}
+        loading={sendingMessage}
         showEmojiPicker={showEmojiPicker}
         setShowEmojiPicker={setShowEmojiPicker}
         showVoiceRecorder={showVoiceRecorder}

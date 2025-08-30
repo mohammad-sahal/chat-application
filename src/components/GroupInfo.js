@@ -6,11 +6,46 @@ const GroupInfo = ({ group, onClose, onGroupUpdated }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [groupName, setGroupName] = useState(group.name);
   const [groupAvatar, setGroupAvatar] = useState(group.avatar || '');
+  const [avatarFile, setAvatarFile] = useState(null);
+  const [avatarPreview, setAvatarPreview] = useState(group.avatar || '');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const { user } = useAuth();
 
   const isAdmin = group.admin._id === user.id;
+
+  const handleImageUpload = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      // Validate file type
+      if (!file.type.startsWith('image/')) {
+        setError('Please select an image file');
+        return;
+      }
+      
+      // Validate file size (max 5MB)
+      if (file.size > 5 * 1024 * 1024) {
+        setError('Image size should be less than 5MB');
+        return;
+      }
+
+      setAvatarFile(file);
+      
+      // Create preview URL
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setAvatarPreview(e.target.result);
+        setGroupAvatar(e.target.result);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleRemoveImage = () => {
+    setAvatarFile(null);
+    setAvatarPreview('');
+    setGroupAvatar('');
+  };
 
   const handleUpdateGroup = async (e) => {
     e.preventDefault();
@@ -146,14 +181,62 @@ const GroupInfo = ({ group, onClose, onGroupUpdated }) => {
                   />
                 </div>
                 <div>
-                  <label className="block text-gray-700 text-sm font-semibold mb-2">Avatar URL</label>
+                  <label className="block text-gray-700 text-sm font-semibold mb-2">Group Picture (Optional)</label>
+                  
                   <input
-                    type="text"
-                    value={groupAvatar}
-                    onChange={(e) => setGroupAvatar(e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                    placeholder="Avatar URL"
+                    id="group-info-avatar-upload"
+                    type="file"
+                    accept="image/*"
+                    onChange={handleImageUpload}
+                    className="hidden"
                   />
+                  
+                  {!avatarPreview ? (
+                    <label 
+                      htmlFor="group-info-avatar-upload" 
+                      className="cursor-pointer block w-full border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-blue-500 hover:bg-blue-50/50 transition-all duration-200"
+                    >
+                      <div className="flex flex-col items-center space-y-2">
+                        <svg className="h-6 w-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                        </svg>
+                        <div>
+                          <p className="text-sm text-gray-600 font-medium">Upload group photo</p>
+                          <p className="text-xs text-gray-500">PNG, JPG up to 5MB</p>
+                        </div>
+                      </div>
+                    </label>
+                  ) : (
+                    <div className="relative">
+                      <div className="flex items-center space-x-3 p-3 border border-gray-300 rounded-lg bg-gray-50">
+                        <img 
+                          src={avatarPreview} 
+                          alt="Group avatar preview" 
+                          className="w-12 h-12 rounded-full object-cover border-2 border-blue-500"
+                        />
+                        <div className="flex-1">
+                          <p className="text-sm font-medium text-gray-900">Group picture</p>
+                          <p className="text-xs text-gray-500">{avatarFile?.name || 'Current photo'}</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleRemoveImage}
+                          className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-full transition-colors"
+                          title="Remove image"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </div>
+                      <label 
+                        htmlFor="group-info-avatar-upload" 
+                        className="cursor-pointer block w-full text-center mt-2 text-xs text-blue-600 hover:text-blue-800 transition-colors"
+                      >
+                        Change photo
+                      </label>
+                    </div>
+                  )}
                 </div>
                 <div className="flex space-x-3">
                   <button
