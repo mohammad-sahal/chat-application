@@ -95,13 +95,196 @@ const MessageSkeleton = () => (
   </div>
 );
 
-const Message = React.memo(({ message, isOwn, showAvatar, user }) => {
+const VoiceMessage = React.memo(({ message, isOwn }) => {
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const audioRef = useRef(null);
+  const progressRef = useRef(null);
+
+  const audioUrl = useMemo(() => {
+    if (message.content && message.type === 'voice') {
+      try {
+        // Convert base64 back to blob URL
+        const byteCharacters = atob(message.content);
+        const byteNumbers = new Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+          byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        const blob = new Blob([byteArray], { type: 'audio/webm' });
+        return URL.createObjectURL(blob);
+      } catch (error) {
+        console.error('Error creating audio URL:', error);
+        return null;
+      }
+    }
+    return null;
+  }, [message.content, message.type]);
+
+  useEffect(() => {
+    return () => {
+      if (audioUrl) {
+        URL.revokeObjectURL(audioUrl);
+      }
+    };
+  }, [audioUrl]);
+
+  const togglePlay = () => {
+    if (!audioRef.current || !audioUrl) return;
+
+    if (isPlaying) {
+      audioRef.current.pause();
+    } else {
+      audioRef.current.play();
+    }
+  };
+
+  const formatTime = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  return (
+    <div className="flex items-center space-x-3 min-w-0">
+      <button 
+        onClick={togglePlay}
+        disabled={!audioUrl}
+        className={`p-2 rounded-full transition-all ${
+          isOwn ? 'bg-blue-500 hover:bg-blue-400' : 'bg-gray-200 hover:bg-gray-300'
+        } ${!audioUrl ? 'opacity-50 cursor-not-allowed' : ''}`}
+      >
+        {isPlaying ? (
+          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/>
+          </svg>
+        ) : (
+          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M8 5v14l11-7z"/>
+          </svg>
+        )}
+      </button>
+      
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center space-x-1">
+          {[...Array(15)].map((_, i) => (
+            <div
+              key={i}
+              className={`w-0.5 rounded-full transition-all ${
+                isOwn ? 'bg-blue-300' : 'bg-gray-400'
+              } ${isPlaying ? 'animate-pulse' : ''}`}
+              style={{ height: `${Math.random() * 16 + 4}px` }}
+            ></div>
+          ))}
+        </div>
+      </div>
+      
+      <span className={`text-xs ${isOwn ? 'text-blue-200' : 'text-gray-500'} whitespace-nowrap`}>
+        {isPlaying && duration > 0 ? formatTime(currentTime) : formatTime(message.duration || 0)}
+      </span>
+
+      {audioUrl && (
+        <audio
+          ref={audioRef}
+          src={audioUrl}
+          onPlay={() => setIsPlaying(true)}
+          onPause={() => setIsPlaying(false)}
+          onEnded={() => {
+            setIsPlaying(false);
+            setCurrentTime(0);
+          }}
+          onLoadedMetadata={() => setDuration(audioRef.current.duration)}
+          onTimeUpdate={() => setCurrentTime(audioRef.current.currentTime)}
+          preload="metadata"
+        />
+      )}
+    </div>
+  );
+});
+
+const Message = React.memo(({ message, isOwn, showAvatar, user, onDelete, onMarkAsRead }) => {
+  const [showOptions, setShowOptions] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
   const formatTime = (date) => {
     return new Date(date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
+  const handleDelete = async () => {
+    if (!window.confirm('Are you sure you want to delete this message?')) return;
+    
+    setIsDeleting(true);
+    try {
+      await onDelete(message._id);
+    } catch (error) {
+      console.error('Failed to delete message:', error);
+      setIsDeleting(false);
+    }
+  };
+
+  const getReadStatus = () => {
+    if (!isOwn) return null;
+    
+    // Check if message has been read
+    const isRead = message.readBy && message.readBy.length > 0;
+    const isDelivered = message.delivered || message.createdAt;
+
+    if (isRead) {
+      return (
+        <div className="flex" title="Read">
+          <svg className="w-4 h-4 text-blue-500" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+          </svg>
+          <svg className="w-4 h-4 text-blue-500 -ml-1" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+          </svg>
+        </div>
+      );
+    } else if (isDelivered) {
+      return (
+        <div className="flex" title="Delivered">
+          <svg className="w-4 h-4 text-gray-400" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+          </svg>
+          <svg className="w-4 h-4 text-gray-400 -ml-1" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+          </svg>
+        </div>
+      );
+    } else {
+      return (
+        <div className="flex" title="Sent">
+          <svg className="w-4 h-4 text-gray-400" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+          </svg>
+        </div>
+      );
+    }
+  };
+
+  // Mark message as read when it becomes visible (for received messages)
+  useEffect(() => {
+    if (!isOwn && !message.readBy?.includes(user.id)) {
+      onMarkAsRead(message._id);
+    }
+  }, [isOwn, message._id, message.readBy, user.id, onMarkAsRead]);
+
+  if (isDeleting) {
+    return (
+      <div className={`flex items-center justify-center space-x-2 py-2 ${isOwn ? 'justify-end' : 'justify-start'}`}>
+        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-400"></div>
+        <span className="text-xs text-gray-500 italic">Deleting...</span>
+      </div>
+    );
+  }
+
   return (
-    <div className={`flex items-end space-x-2 group ${isOwn ? 'justify-end' : 'justify-start'}`}>
+    <div 
+      className={`flex items-end space-x-2 group relative ${isOwn ? 'justify-end' : 'justify-start'}`}
+      onMouseEnter={() => setShowOptions(true)}
+      onMouseLeave={() => setShowOptions(false)}
+    >
       {!isOwn && showAvatar && (
         <img
           src={message.sender.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(message.sender.username)}&background=random&size=32`}
@@ -112,6 +295,22 @@ const Message = React.memo(({ message, isOwn, showAvatar, user }) => {
       {!isOwn && !showAvatar && <div className="w-6 sm:w-8 flex-shrink-0"></div>}
       
       <div className={`max-w-xs sm:max-w-md lg:max-w-lg xl:max-w-xl relative ${isOwn ? 'order-first' : ''}`}>
+        {/* Message Options */}
+        {showOptions && isOwn && (
+          <div className={`absolute -top-8 ${isOwn ? 'right-0' : 'left-0'} bg-white border border-gray-200 rounded-lg shadow-lg z-10 flex`}>
+            <button
+              onClick={handleDelete}
+              className="px-3 py-1 text-xs text-red-600 hover:bg-red-50 rounded-lg transition-colors flex items-center space-x-1"
+              title="Delete message"
+            >
+              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+              </svg>
+              <span>Delete</span>
+            </button>
+          </div>
+        )}
+
         <div
           className={`px-3 sm:px-4 py-2 rounded-2xl shadow-sm transition-all duration-200 hover:shadow-md ${
             isOwn
@@ -126,27 +325,7 @@ const Message = React.memo(({ message, isOwn, showAvatar, user }) => {
           )}
           
           {message.type === 'voice' && (
-            <div className="flex items-center space-x-3">
-              <button className={`p-2 rounded-full ${isOwn ? 'bg-blue-500' : 'bg-gray-200'}`}>
-                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M8 5v14l11-7z"/>
-                </svg>
-              </button>
-              <div className="flex-1">
-                <div className="flex items-center space-x-1">
-                  {[...Array(20)].map((_, i) => (
-                    <div
-                      key={i}
-                      className={`w-0.5 rounded-full ${isOwn ? 'bg-blue-300' : 'bg-gray-400'}`}
-                      style={{ height: `${Math.random() * 20 + 8}px` }}
-                    ></div>
-                  ))}
-                </div>
-              </div>
-              <span className={`text-xs ${isOwn ? 'text-blue-200' : 'text-gray-500'}`}>
-                0:{message.duration || '15'}
-              </span>
-            </div>
+            <VoiceMessage message={message} isOwn={isOwn} />
           )}
           
           {message.type === 'image' && (
@@ -164,13 +343,7 @@ const Message = React.memo(({ message, isOwn, showAvatar, user }) => {
           <span className="text-xs text-gray-500">
             {formatTime(message.timestamp)}
           </span>
-          {isOwn && (
-            <div className="flex">
-              <svg className="w-4 h-4 text-blue-500" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
-              </svg>
-            </div>
-          )}
+          {getReadStatus()}
         </div>
       </div>
     </div>
@@ -454,29 +627,57 @@ const ChatArea = ({ socket, chat, chatType, onInitiateCall, onBackToSidebar, isM
   }, []);
 
   // Handle voice message
-  const handleVoiceMessage = useCallback((audioBlob) => {
+  const handleVoiceMessage = useCallback(async (audioBlob) => {
     if (!socket || !chat) return;
 
-    // Create a FormData object to send the audio file
-    const formData = new FormData();
-    formData.append('audio', audioBlob, 'voice-message.webm');
-    formData.append('senderId', user.id);
-    formData.append('type', 'voice');
-    formData.append(chatType === 'user' ? 'receiverId' : 'groupId', chat._id);
+    try {
+      // Convert blob to base64 for transmission
+      const reader = new FileReader();
+      reader.onload = () => {
+        const base64Audio = reader.result.split(',')[1]; // Remove data:audio/webm;base64, prefix
+        
+        const messageData = {
+          senderId: user.id,
+          content: base64Audio,
+          type: 'voice',
+          duration: Math.floor(audioBlob.size / 1000), // Rough estimate
+          timestamp: new Date().toISOString(),
+          [chatType === 'user' ? 'receiverId' : 'groupId']: chat._id
+        };
 
-    // For now, emit a voice message event through socket
-    // TODO: Implement proper file upload to server
-    const messageData = {
-      senderId: user.id,
-      content: 'Voice message',
-      type: 'voice',
-      duration: Math.floor(audioBlob.size / 1000), // Rough estimate
-      timestamp: new Date().toISOString(),
-      [chatType === 'user' ? 'receiverId' : 'groupId']: chat._id
-    };
-
-    socket.emit(chatType === 'user' ? 'private message' : 'group message', messageData);
+        socket.emit(chatType === 'user' ? 'private message' : 'group message', messageData);
+      };
+      reader.readAsDataURL(audioBlob);
+    } catch (error) {
+      console.error('Error handling voice message:', error);
+    }
   }, [socket, chat, chatType, user.id]);
+
+  // Handle message deletion
+  const handleDeleteMessage = useCallback(async (messageId) => {
+    if (!socket || !messageId) return;
+
+    try {
+      socket.emit('delete message', { messageId, userId: user.id });
+      
+      // Optimistically remove from UI
+      setMessages(prev => prev.filter(msg => msg._id !== messageId));
+    } catch (error) {
+      console.error('Error deleting message:', error);
+    }
+  }, [socket, user.id]);
+
+  // Handle marking messages as read
+  const handleMarkAsRead = useCallback((messageId) => {
+    if (!socket || !messageId) return;
+
+    socket.emit('mark as read', { 
+      messageId, 
+      userId: user.id,
+      chatId: chat._id,
+      chatType 
+    });
+  }, [socket, user.id, chat?._id, chatType]);
 
   // Fetch messages when chat changes
   useEffect(() => {
@@ -528,6 +729,22 @@ const ChatArea = ({ socket, chat, chatType, onInitiateCall, onBackToSidebar, isM
       });
     };
 
+    const handleMessageDeleted = (data) => {
+      setMessages(prev => prev.filter(msg => msg._id !== data.messageId));
+    };
+
+    const handleMessageRead = (data) => {
+      setMessages(prev => prev.map(msg => {
+        if (msg._id === data.messageId) {
+          return {
+            ...msg,
+            readBy: [...(msg.readBy || []), data.userId].filter((id, index, arr) => arr.indexOf(id) === index)
+          };
+        }
+        return msg;
+      }));
+    };
+
     const handleTypingEvent = (data) => {
       const isCurrentChat = (chatType === 'user' && data.chatId === chat._id) || 
                            (chatType === 'group' && data.chatId === chat._id);
@@ -559,12 +776,16 @@ const ChatArea = ({ socket, chat, chatType, onInitiateCall, onBackToSidebar, isM
 
     socket.on('private message', handleNewMessage);
     socket.on('group message', handleNewMessage);
+    socket.on('message deleted', handleMessageDeleted);
+    socket.on('message read', handleMessageRead);
     socket.on('typing', handleTypingEvent);
     socket.on('stop typing', handleStopTypingEvent);
 
     return () => {
       socket.off('private message', handleNewMessage);
       socket.off('group message', handleNewMessage);
+      socket.off('message deleted', handleMessageDeleted);
+      socket.off('message read', handleMessageRead);
       socket.off('typing', handleTypingEvent);
       socket.off('stop typing', handleStopTypingEvent);
     };
@@ -708,6 +929,8 @@ const ChatArea = ({ socket, chat, chatType, onInitiateCall, onBackToSidebar, isM
                   isOwn={isOwn}
                   showAvatar={showAvatar}
                   user={user}
+                  onDelete={handleDeleteMessage}
+                  onMarkAsRead={handleMarkAsRead}
                 />
               );
             })}
