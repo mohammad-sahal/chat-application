@@ -440,21 +440,7 @@ const Message = React.memo(({ message, isOwn, showAvatar, user, onDelete, onMark
                 </svg>
                 <span>Delete Message</span>
               </button>
-              <button
-                onClick={handleEditClick}
-                disabled={message.type !== 'text'}
-                className={`w-full px-4 py-2 text-sm flex items-center space-x-2 transition-colors ${
-                  message.type === 'text' 
-                    ? 'text-blue-600 hover:bg-blue-50' 
-                    : 'text-gray-400 cursor-not-allowed'
-                }`}
-                title={message.type === 'text' ? 'Edit this message' : 'Can only edit text messages'}
-              >
-                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
-                </svg>
-                <span>Edit Message</span>
-              </button>
+            
               <button
                 onClick={handleCopyClick}
                 className="w-full px-4 py-2 text-sm text-green-600 hover:bg-green-50 flex items-center space-x-2 transition-colors"
