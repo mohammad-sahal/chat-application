@@ -12,6 +12,7 @@ const Sidebar = ({
   activeChat, 
   chatType, 
   socket,
+  isMobileView = false,
   // Call management props
   incomingCall,
   activeCall,
@@ -133,7 +134,7 @@ const Sidebar = ({
   // Show loading state while auth is loading
   if (authLoading) {
     return (
-      <div className="w-80 bg-gradient-to-b from-gray-50 to-gray-100 border-r border-gray-200 flex flex-col h-full shadow-lg">
+      <div className={`${isMobileView ? 'w-full' : 'w-80'} bg-gradient-to-b from-gray-50 to-gray-100 border-r border-gray-200 flex flex-col h-full shadow-lg`}>
         <div className="p-6 bg-white border-b border-gray-200">
           <div className="animate-pulse">
             <div className="w-32 h-8 bg-gray-300 rounded mb-4"></div>
@@ -152,9 +153,9 @@ const Sidebar = ({
   }
 
   return (
-    <div className="w-80 bg-gradient-to-b from-gray-50 to-gray-100 border-r border-gray-200 flex flex-col h-full shadow-lg">
+    <div className={`${isMobileView ? 'w-full' : 'w-80'} bg-gradient-to-b from-gray-50 to-gray-100 border-r border-gray-200 flex flex-col h-full shadow-lg`}>
       {/* Header */}
-      <div className="p-6 bg-white border-b border-gray-200">
+      <div className="p-4 sm:p-6 bg-white border-b border-gray-200">
         <div className="flex items-center space-x-3 mb-6">
           <div className="w-10 h-10 bg-gradient-to-r from-blue-600 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
             <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -225,7 +226,7 @@ const Sidebar = ({
         )}
 
         {activeTab === 'chats' ? (
-          <div className="p-4">
+          <div className="p-3 sm:p-4">
             {/* Action Buttons */}
             <div className="flex space-x-2 mb-4">
               <button
@@ -273,14 +274,14 @@ const Sidebar = ({
                         <img 
                           src={userItem.avatar || `https://ui-avatars.com/api/?name=${userItem.username}&background=random`} 
                           alt={userItem.username} 
-                          className="w-12 h-12 rounded-full border-2 border-white shadow-sm"
+                          className="w-10 h-10 sm:w-12 sm:h-12 rounded-full border-2 border-white shadow-sm"
                         />
-                        <div className={`absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-white shadow-sm ${
+                        <div className={`absolute -bottom-1 -right-1 w-3 h-3 sm:w-4 sm:h-4 rounded-full border-2 border-white shadow-sm ${
                           userItem.online ? 'bg-green-500' : 'bg-gray-400'
                         }`}></div>
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="font-semibold text-gray-900 truncate">{userItem.username}</p>
+                        <p className="font-semibold text-gray-900 truncate text-sm sm:text-base">{userItem.username}</p>
                         <p className={`text-xs ${userItem.online ? 'text-green-600' : 'text-gray-500'}`}>
                           {userItem.online ? '● Online' : '○ Offline'}
                         </p>
@@ -336,7 +337,7 @@ const Sidebar = ({
             )}
           </div>
         ) : (
-          <div className="p-4">
+          <div className="p-3 sm:p-4">
             {/* Action Buttons */}
             <div className="flex space-x-2 mb-4">
               <button
@@ -384,16 +385,16 @@ const Sidebar = ({
                         <img 
                           src={group.avatar || `https://ui-avatars.com/api/?name=${group.name}&background=random`} 
                           alt={group.name} 
-                          className="w-12 h-12 rounded-full border-2 border-white shadow-sm"
+                          className="w-10 h-10 sm:w-12 sm:h-12 rounded-full border-2 border-white shadow-sm"
                         />
-                        <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-purple-500 rounded-full border-2 border-white shadow-sm flex items-center justify-center">
+                        <div className="absolute -bottom-1 -right-1 w-3 h-3 sm:w-4 sm:h-4 bg-purple-500 rounded-full border-2 border-white shadow-sm flex items-center justify-center">
                           <svg className="w-2 h-2 text-white" fill="currentColor" viewBox="0 0 24 24">
                             <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
                           </svg>
                         </div>
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="font-semibold text-gray-900 truncate">{group.name}</p>
+                        <p className="font-semibold text-gray-900 truncate text-sm sm:text-base">{group.name}</p>
                         <p className="text-xs text-gray-500">{group.members.length} members</p>
                       </div>
                       <button
@@ -418,19 +419,19 @@ const Sidebar = ({
       </div>
 
       {/* Footer */}
-      <div className="p-4 bg-white border-t border-gray-200">
+      <div className="p-3 sm:p-4 bg-white border-t border-gray-200">
         <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-3">
-            <div className="relative">
-              <img 
-                src={user?.avatar || `https://ui-avatars.com/api/?name=${user?.username}&background=random`} 
-                alt={user?.username} 
-                className="w-10 h-10 rounded-full border-2 border-white shadow-sm cursor-pointer"
-                onClick={() => setShowUserProfile(true)}
-                title="Click to edit profile"
-              />
-              <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-green-500 rounded-full border-2 border-white"></div>
-            </div>
+                      <div className="flex items-center space-x-3">
+              <div className="relative">
+                <img 
+                  src={user?.avatar || `https://ui-avatars.com/api/?name=${user?.username}&background=random`} 
+                  alt={user?.username} 
+                  className="w-8 h-8 sm:w-10 sm:h-10 rounded-full border-2 border-white shadow-sm cursor-pointer"
+                  onClick={() => setShowUserProfile(true)}
+                  title="Click to edit profile"
+                />
+                <div className="absolute -bottom-1 -right-1 w-2 h-2 sm:w-3 sm:h-3 bg-green-500 rounded-full border-2 border-white"></div>
+              </div>
             <div>
               <p className="font-semibold text-gray-900 text-sm">{user?.username}</p>
               <p className="text-xs text-green-600">● Online</p>

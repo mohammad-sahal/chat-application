@@ -9,6 +9,7 @@ const Chat = () => {
   const [socket, setSocket] = useState(null);
   const [activeChat, setActiveChat] = useState(null);
   const [chatType, setChatType] = useState(''); // 'user' or 'group'
+  const [isMobileView, setIsMobileView] = useState(false);
   const { user } = useAuth();
   
   // Call management - get all state and functions
@@ -24,6 +25,7 @@ const Chat = () => {
     isVideoOff,
     callError,
     connectionAttempts,
+    callState,
     initiateCall,
     acceptCall,
     declineCall,
@@ -32,6 +34,18 @@ const Chat = () => {
     toggleVideo,
     formatDuration
   } = useCallManager(socket);
+
+  // Check for mobile view
+  useEffect(() => {
+    const checkMobileView = () => {
+      setIsMobileView(window.innerWidth < 768);
+    };
+
+    checkMobileView();
+    window.addEventListener('resize', checkMobileView);
+    
+    return () => window.removeEventListener('resize', checkMobileView);
+  }, []);
 
   useEffect(() => {
     const newSocket = io('https://chat-app-1-izne.onrender.com', {
@@ -91,6 +105,58 @@ const Chat = () => {
     setChatType(type);
   };
 
+  const handleBackToSidebar = () => {
+    setActiveChat(null);
+    setChatType('');
+  };
+
+  // Mobile view: show only sidebar or only chat area
+  if (isMobileView) {
+    return (
+      <div className="h-screen bg-white">
+        {!activeChat ? (
+          <Sidebar 
+            onSelectChat={handleSelectChat} 
+            activeChat={activeChat} 
+            chatType={chatType}
+            socket={socket}
+            isMobileView={isMobileView}
+            // Pass all call management props
+            incomingCall={incomingCall}
+            activeCall={activeCall}
+            localStream={localStream}
+            remoteStream={remoteStream}
+            isCallActive={isCallActive}
+            isConnecting={isConnecting}
+            callDuration={callDuration}
+            isMuted={isMuted}
+            isVideoOff={isVideoOff}
+            initiateCall={initiateCall}
+            acceptCall={acceptCall}
+            declineCall={declineCall}
+            endCall={endCall}
+            toggleMute={toggleMute}
+            toggleVideo={toggleVideo}
+            formatDuration={formatDuration}
+            callError={callError}
+            connectionAttempts={connectionAttempts}
+            callState={callState}
+          />
+        ) : (
+          <ChatArea 
+            socket={socket} 
+            chat={activeChat} 
+            chatType={chatType}
+            onInitiateCall={initiateCall}
+            onBackToSidebar={handleBackToSidebar}
+            isMobileView={isMobileView}
+          />
+        )}
+      </div>
+    );
+  }
+
+  // Desktop view: show sidebar and chat area side by side
   return (
     <div className="flex h-screen bg-white">
       <Sidebar 
@@ -98,6 +164,7 @@ const Chat = () => {
         activeChat={activeChat} 
         chatType={chatType}
         socket={socket}
+        isMobileView={isMobileView}
         // Pass all call management props
         incomingCall={incomingCall}
         activeCall={activeCall}
@@ -117,6 +184,7 @@ const Chat = () => {
         formatDuration={formatDuration}
         callError={callError}
         connectionAttempts={connectionAttempts}
+        callState={callState}
       />
       {activeChat ? (
         <ChatArea 
@@ -124,6 +192,7 @@ const Chat = () => {
           chat={activeChat} 
           chatType={chatType}
           onInitiateCall={initiateCall}
+          isMobileView={isMobileView}
         />
       ) : (
         <div className="flex-1 flex items-center justify-center bg-gray-50">

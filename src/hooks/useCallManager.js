@@ -13,6 +13,7 @@ export const useCallManager = (socket) => {
   const [isVideoOff, setIsVideoOff] = useState(false);
   const [callError, setCallError] = useState(null);
   const [connectionAttempts, setConnectionAttempts] = useState(0);
+  const [callState, setCallState] = useState('idle'); // 'idle', 'ringing', 'connecting', 'active', 'ended'
 
   const peerConnectionRef = useRef(null);
   const durationIntervalRef = useRef(null);
@@ -34,9 +35,11 @@ export const useCallManager = (socket) => {
         from: data.from,
         name: data.name,
         signal: data.signal,
-        callType: data.callType
+        callType: data.callType,
+        callId: data.callId
       });
       setCallError(null);
+      setCallState('ringing');
       console.log('📞 Set incomingCall state');
     });
 
@@ -48,16 +51,20 @@ export const useCallManager = (socket) => {
           .then(() => {
             console.log('✅ Remote description set successfully');
             setIsCallActive(true);
+            setIsConnecting(false);
+            setCallState('active');
             setCallError(null);
             setConnectionAttempts(0);
           })
           .catch(error => {
             console.error('❌ Error setting remote description:', error);
             setCallError('Failed to establish connection. Please try again.');
+            setCallState('ended');
           });
       } else {
         console.warn('⚠️ No peer connection available for call answered');
         setCallError('Connection lost. Please try again.');
+        setCallState('ended');
       }
     });
 
@@ -67,16 +74,42 @@ export const useCallManager = (socket) => {
       setIncomingCall(null);
       setActiveCall(null);
       setIsCallActive(false);
+      setCallState('ended');
       setCallError(null);
       cleanupCall();
     });
 
     // Listen for call ended
-    socket.on('call ended', () => {
-      console.log('🔚 Call ended');
+    socket.on('call ended', (data) => {
+      console.log('🔚 Call ended:', data);
       setActiveCall(null);
       setIsCallActive(false);
-      setCallError(null);
+      setCallState('ended');
+      if (data && data.reason) {
+        setCallError(data.reason);
+      } else {
+        setCallError(null);
+      }
+      cleanupCall();
+    });
+
+    // Listen for call failed
+    socket.on('call failed', (data) => {
+      console.log('💥 Call failed:', data);
+      setCallError(data.reason || 'Call failed');
+      setCallState('ended');
+      setIsConnecting(false);
+      cleanupCall();
+    });
+
+    // Listen for call timeout
+    socket.on('call timeout', () => {
+      console.log('⏰ Call timeout');
+      setCallError('Call timeout. The user did not answer.');
+      setCallState('ended');
+      setIncomingCall(null);
+      setActiveCall(null);
+      setIsConnecting(false);
       cleanupCall();
     });
 
@@ -99,6 +132,8 @@ export const useCallManager = (socket) => {
       socket.off('call answered');
       socket.off('call declined');
       socket.off('call ended');
+      socket.off('call failed');
+      socket.off('call timeout');
       socket.off('ice candidate');
     };
   }, [socket]);
@@ -216,6 +251,7 @@ export const useCallManager = (socket) => {
     try {
       console.log('Initiating call:', { userId, username, callType });
       setIsConnecting(true);
+      setCallState('connecting');
       setCallError(null);
       setConnectionAttempts(prev => prev + 1);
       
@@ -246,10 +282,13 @@ export const useCallManager = (socket) => {
       });
 
       setActiveCall({ userId, username, callType });
+      setCallState('ringing');
       console.log('Call initiated successfully');
     } catch (error) {
       console.error('Error initiating call:', error);
       setIsConnecting(false);
+      setCallState('ended');
+      setCallError('Failed to initiate call. Please check your camera/microphone permissions.');
       cleanupCall();
     }
   };
@@ -260,6 +299,7 @@ export const useCallManager = (socket) => {
     try {
       console.log('Accepting call:', incomingCall);
       setIsConnecting(true);
+      setCallState('connecting');
       setCallError(null);
       setConnectionAttempts(prev => prev + 1);
       
@@ -296,7 +336,8 @@ export const useCallManager = (socket) => {
     } catch (error) {
       console.error('Error accepting call:', error);
       setIsConnecting(false);
-      setCallError('Failed to accept call. Please try again.');
+      setCallState('ended');
+      setCallError('Failed to accept call. Please check your camera/microphone permissions.');
       cleanupCall();
     }
   };
@@ -307,6 +348,7 @@ export const useCallManager = (socket) => {
       socket.emit('call declined', { to: incomingCall.from });
     }
     setIncomingCall(null);
+    setCallState('ended');
     setCallError(null);
     cleanupCall();
   };
@@ -318,6 +360,7 @@ export const useCallManager = (socket) => {
     }
     setActiveCall(null);
     setIsCallActive(false);
+    setCallState('ended');
     setCallError(null);
     cleanupCall();
   };
@@ -341,6 +384,14 @@ export const useCallManager = (socket) => {
     if (connectionTimeoutRef.current) {
       clearTimeout(connectionTimeoutRef.current);
     }
+    if (durationIntervalRef.current) {
+      clearInterval(durationIntervalRef.current);
+    }
+    
+    // Reset call state to idle after a brief delay
+    setTimeout(() => {
+      setCallState('idle');
+    }, 1000);
   };
 
   const toggleMute = () => {
@@ -382,6 +433,7 @@ export const useCallManager = (socket) => {
     isVideoOff,
     callError,
     connectionAttempts,
+    callState,
 
     // Actions
     initiateCall,
