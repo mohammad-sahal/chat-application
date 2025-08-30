@@ -226,38 +226,35 @@ const Message = React.memo(({ message, isOwn, showAvatar, user, onDelete, onMark
   const getReadStatus = () => {
     if (!isOwn) return null;
     
-    // Check if message has been read
+    // Check if message has been read (receiver saw the message)
     const isRead = message.readBy && message.readBy.length > 0;
-    const isDelivered = message.delivered || message.createdAt;
-
+    
     if (isRead) {
+      // Double blue ticks (read) - overlapping with no gap
       return (
-        <div className="flex" title="Read">
-          <svg className="w-4 h-4 text-blue-500" fill="currentColor" viewBox="0 0 24 24">
-            <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
-          </svg>
-          <svg className="w-4 h-4 text-blue-500 -ml-1" fill="currentColor" viewBox="0 0 24 24">
-            <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
-          </svg>
-        </div>
-      );
-    } else if (isDelivered) {
-      return (
-        <div className="flex" title="Delivered">
-          <svg className="w-4 h-4 text-gray-400" fill="currentColor" viewBox="0 0 24 24">
-            <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
-          </svg>
-          <svg className="w-4 h-4 text-gray-400 -ml-1" fill="currentColor" viewBox="0 0 24 24">
-            <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
-          </svg>
+        <div className="flex items-center" title="Read">
+          <div className="relative">
+            <svg className="w-4 h-4 text-blue-500" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+            </svg>
+            <svg className="w-4 h-4 text-blue-500 absolute top-0 left-1.5" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+            </svg>
+          </div>
         </div>
       );
     } else {
+      // Double gray ticks (delivered) - overlapping with no gap
       return (
-        <div className="flex" title="Sent">
-          <svg className="w-4 h-4 text-gray-400" fill="currentColor" viewBox="0 0 24 24">
-            <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
-          </svg>
+        <div className="flex items-center" title="Delivered">
+          <div className="relative">
+            <svg className="w-4 h-4 text-gray-400" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+            </svg>
+            <svg className="w-4 h-4 text-gray-400 absolute top-0 left-1.5" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+            </svg>
+          </div>
         </div>
       );
     }
