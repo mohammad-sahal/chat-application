@@ -206,20 +206,53 @@ const VoiceMessage = React.memo(({ message, isOwn }) => {
 const Message = React.memo(({ message, isOwn, showAvatar, user, onDelete, onMarkAsRead }) => {
   const [showOptions, setShowOptions] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [longPressTimer, setLongPressTimer] = useState(null);
 
   const formatTime = (date) => {
     return new Date(date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
-  const handleDelete = async () => {
-    if (!window.confirm('Are you sure you want to delete this message?')) return;
-    
+  const handleDeleteClick = () => {
+    setShowDeleteConfirm(true);
+    setShowOptions(false);
+  };
+
+  const handleConfirmDelete = async () => {
     setIsDeleting(true);
+    setShowDeleteConfirm(false);
     try {
       await onDelete(message._id);
     } catch (error) {
       console.error('Failed to delete message:', error);
       setIsDeleting(false);
+      // Show error notification
+      alert('Failed to delete message. Please try again.');
+    }
+  };
+
+  const handleCancelDelete = () => {
+    setShowDeleteConfirm(false);
+  };
+
+  // Long press handlers for mobile
+  const handleTouchStart = (e) => {
+    if (!isOwn) return;
+    
+    const timer = setTimeout(() => {
+      setShowOptions(true);
+      // Add haptic feedback if available
+      if (navigator.vibrate) {
+        navigator.vibrate(50);
+      }
+    }, 500);
+    setLongPressTimer(timer);
+  };
+
+  const handleTouchEnd = () => {
+    if (longPressTimer) {
+      clearTimeout(longPressTimer);
+      setLongPressTimer(null);
     }
   };
 
@@ -267,11 +300,52 @@ const Message = React.memo(({ message, isOwn, showAvatar, user, onDelete, onMark
     }
   }, [isOwn, message._id, message.readBy, user.id, onMarkAsRead]);
 
+  // Close options/confirmation on outside click
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (showDeleteConfirm || showOptions) {
+        if (!event.target.closest('.message-options') && 
+            !event.target.closest('.delete-confirm')) {
+          setShowOptions(false);
+          setShowDeleteConfirm(false);
+        }
+      }
+    };
+
+    const handleEscapeKey = (event) => {
+      if (event.key === 'Escape') {
+        setShowOptions(false);
+        setShowDeleteConfirm(false);
+      }
+    };
+
+    if (showDeleteConfirm || showOptions) {
+      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('keydown', handleEscapeKey);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleEscapeKey);
+    };
+  }, [showDeleteConfirm, showOptions]);
+
+  // Cleanup long press timer on unmount
+  useEffect(() => {
+    return () => {
+      if (longPressTimer) {
+        clearTimeout(longPressTimer);
+      }
+    };
+  }, [longPressTimer]);
+
   if (isDeleting) {
     return (
-      <div className={`flex items-center justify-center space-x-2 py-2 ${isOwn ? 'justify-end' : 'justify-start'}`}>
-        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-400"></div>
-        <span className="text-xs text-gray-500 italic">Deleting...</span>
+      <div className={`flex items-center space-x-2 py-4 px-4 ${isOwn ? 'justify-end' : 'justify-start'}`}>
+        <div className="flex items-center space-x-2 bg-red-50 border border-red-200 rounded-xl px-3 py-2">
+          <div className="animate-spin rounded-full h-4 w-4 border-2 border-red-300 border-t-red-600"></div>
+          <span className="text-sm text-red-600 font-medium">Deleting message...</span>
+        </div>
       </div>
     );
   }
@@ -279,8 +353,11 @@ const Message = React.memo(({ message, isOwn, showAvatar, user, onDelete, onMark
   return (
     <div 
       className={`flex items-end space-x-2 group relative ${isOwn ? 'justify-end' : 'justify-start'}`}
-      onMouseEnter={() => setShowOptions(true)}
-      onMouseLeave={() => setShowOptions(false)}
+      onMouseEnter={() => !showDeleteConfirm && setShowOptions(true)}
+      onMouseLeave={() => !showDeleteConfirm && setShowOptions(false)}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+      onTouchCancel={handleTouchEnd}
     >
       {!isOwn && showAvatar && (
         <img
@@ -292,19 +369,72 @@ const Message = React.memo(({ message, isOwn, showAvatar, user, onDelete, onMark
       {!isOwn && !showAvatar && <div className="w-6 sm:w-8 flex-shrink-0"></div>}
       
       <div className={`max-w-xs sm:max-w-md lg:max-w-lg xl:max-w-xl relative ${isOwn ? 'order-first' : ''}`}>
-        {/* Message Options */}
-        {showOptions && isOwn && (
-          <div className={`absolute -top-8 ${isOwn ? 'right-0' : 'left-0'} bg-white border border-gray-200 rounded-lg shadow-lg z-10 flex`}>
-            <button
-              onClick={handleDelete}
-              className="px-3 py-1 text-xs text-red-600 hover:bg-red-50 rounded-lg transition-colors flex items-center space-x-1"
-              title="Delete message"
-            >
-              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
-              </svg>
-              <span>Delete</span>
-            </button>
+        {/* Message Options Menu */}
+        {showOptions && isOwn && !showDeleteConfirm && (
+          <div className={`message-options absolute -top-12 ${isOwn ? 'right-0' : 'left-0'} bg-white border border-gray-200 rounded-xl shadow-lg z-20 min-w-max`}>
+            <div className="py-1">
+              <button
+                onClick={handleDeleteClick}
+                className="w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center space-x-2 transition-colors"
+                title="Delete this message"
+              >
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+                </svg>
+                <span>Delete Message</span>
+              </button>
+              <button
+                className="w-full px-4 py-2 text-sm text-gray-600 hover:bg-gray-50 flex items-center space-x-2 transition-colors"
+                title="Coming soon"
+                disabled
+              >
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
+                </svg>
+                <span className="opacity-50">Edit Message</span>
+              </button>
+              <button
+                className="w-full px-4 py-2 text-sm text-gray-600 hover:bg-gray-50 flex items-center space-x-2 transition-colors"
+                title="Coming soon"
+                disabled
+              >
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+                </svg>
+                <span className="opacity-50">Copy Message</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Delete Confirmation Dialog */}
+        {showDeleteConfirm && (
+          <div className={`delete-confirm absolute -top-20 ${isOwn ? 'right-0' : 'left-0'} bg-white border border-red-200 rounded-xl shadow-xl z-30 p-4 min-w-max`}>
+            <div className="flex items-center space-x-2 mb-3">
+              <div className="w-8 h-8 bg-red-100 rounded-full flex items-center justify-center">
+                <svg className="w-4 h-4 text-red-600" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/>
+                </svg>
+              </div>
+              <div>
+                <h4 className="text-sm font-semibold text-gray-900">Delete Message?</h4>
+                <p className="text-xs text-gray-600">This action cannot be undone</p>
+              </div>
+            </div>
+            <div className="flex space-x-2">
+              <button
+                onClick={handleCancelDelete}
+                className="flex-1 px-3 py-1.5 text-xs text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmDelete}
+                className="flex-1 px-3 py-1.5 text-xs text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors"
+              >
+                Delete
+              </button>
+            </div>
           </div>
         )}
 
